@@ -101,37 +101,40 @@ imput_1000 = imputation.ArbitraryNumberImputer(arbitrary_number=1000, variables=
 
 onehot = encoding.OneHotEncoder(variables=cat_features)
 
-# MODIFY - Aplicando Transformações no Dataset
-
-X_train_transform = drop_features.fit_transform(X_train)
-X_train_transform = imput_0.fit_transform(X_train_transform)
-X_train_transform = imput_new.fit_transform(X_train_transform)
-X_train_transform = imput_1000.fit_transform(X_train_transform)
-X_train_transform = onehot.fit_transform(X_train_transform)
-
-X_train_transform
-
 # %%
 
 # MODEL
 
-from sklearn import tree, ensemble, metrics
+from sklearn import tree, ensemble, metrics, pipeline
 
 # model = tree.DecisionTreeClassifier(random_state=42, min_samples_leaf=50)
 model = ensemble.AdaBoostClassifier(random_state=42,
                                     n_estimators=150,
                                     learning_rate=0.1)
 
-model.fit(X=X_train_transform, y=y_train)
+# %%
+
+# PIPELINE
+
+model_pipeline = pipeline.Pipeline(steps=[
+    ("Remoção de Features", drop_features),
+    ("Imputação de Zeros", imput_0),
+    ("Imputação de Não Usuario", imput_new),
+    ("Imputação de 1000", imput_1000),
+    ("ONEHOT Encoding", onehot),
+    ("Algoritmo", model)
+])
+
+model_pipeline.fit(X_train, y_train)
 
 # %%
 
-# ASSESS
+# ASSESS - Métricas
 
 # Treino
 
-y_pred_treino = model.predict(X_train_transform)
-y_proba_treino = model.predict_proba(X_train_transform)
+y_pred_treino = model_pipeline.predict(X_train)
+y_proba_treino = model_pipeline.predict_proba(X_train)
 
 y_pred_treino_acc = metrics.accuracy_score(y_train, y_pred_treino)
 y_pred_treino_auc = metrics.roc_auc_score(y_train, y_proba_treino[:,1])
@@ -143,14 +146,8 @@ print(f"AUC Treino: {y_pred_treino_auc}")
 
 # Teste
 
-X_test_transform = drop_features.transform(X_test)
-X_test_transform = imput_0.transform(X_test_transform)
-X_test_transform = imput_new.transform(X_test_transform)
-X_test_transform = imput_1000.transform(X_test_transform)
-X_test_transform = onehot.transform(X_test_transform)
-
-y_pred_test = model.predict(X_test_transform)
-y_proba_test = model.predict_proba(X_test_transform)
+y_pred_test = model_pipeline.predict(X_test)
+y_proba_test = model_pipeline.predict_proba(X_test)
 
 y_pred_test_acc = metrics.accuracy_score(y_test, y_pred_test)
 y_pred_test_auc = metrics.roc_auc_score(y_test, y_proba_test[:,1])
@@ -165,14 +162,8 @@ print(f"AUC Teste: {y_pred_test_auc}")
 X_oot = df_oot[features]
 y_oot = df_oot[target]
 
-X_oot_transform = drop_features.transform(X_oot)
-X_oot_transform = imput_0.transform(X_oot_transform)
-X_oot_transform = imput_new.transform(X_oot_transform)
-X_oot_transform = imput_1000.transform(X_oot_transform)
-X_oot_transform = onehot.transform(X_oot_transform)
-
-y_pred_oot = model.predict(X_oot_transform)
-y_proba_oot = model.predict_proba(X_oot_transform)
+y_pred_oot = model_pipeline.predict(X_oot)
+y_proba_oot = model_pipeline.predict_proba(X_oot)
 
 y_pred_oot_acc = metrics.accuracy_score(y_oot, y_pred_oot)
 y_pred_oot_auc = metrics.roc_auc_score(y_oot, y_proba_oot[:,1])
@@ -181,7 +172,23 @@ print(f"Acurácia oot: {y_pred_oot_acc}")
 print(f"AUC oot: {y_pred_oot_auc}")
 # %%
 
-feature_names = X_train_transform.columns.tolist()
-features_importance = pd.Series(model.feature_importances_, index=feature_names)
+feature_names = (model_pipeline[:-1].transform(X_train.head(1))
+                                    .columns
+                                    .tolist())
+features_importance = pd.Series(model_pipeline[-1].feature_importances_, index=feature_names)
 features_importance.sort_values(ascending=False)
 # %%
+
+# ASSESS - Persistir Modelo
+
+model_series = pd.Series(
+    {
+        "model": model_pipeline,
+        "features": X_train.columns.tolist(),
+        "auc_train": y_pred_treino_auc,
+        "auc_test": y_pred_test_auc,
+        "auc_oot": y_pred_oot_auc,
+    }
+)
+
+model_series.to_pickle("model_fiel.pkl")
