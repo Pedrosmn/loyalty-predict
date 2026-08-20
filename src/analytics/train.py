@@ -7,14 +7,14 @@ from sklearn import model_selection
 from feature_engine import selection, imputation, encoding
 
 pd.set_option('display.max_columns', None) 
-# pd.reset_option('display.max_rows')
+pd.set_option('display.max_rows', None)
 con = sqlalchemy.create_engine('sqlite:///../../data/analytics/database.db')
 
 # %%
 
 # SAMPLE - Import dos dados
 
-df = pd.read_sql("abt_fiel", con)
+df = pd.read_sql("SELECT * FROM abt_fiel", con)
 
 # SAMPLE - OOT
 
@@ -110,3 +110,78 @@ X_train_transform = imput_1000.fit_transform(X_train_transform)
 X_train_transform = onehot.fit_transform(X_train_transform)
 
 X_train_transform
+
+# %%
+
+# MODEL
+
+from sklearn import tree, ensemble, metrics
+
+# model = tree.DecisionTreeClassifier(random_state=42, min_samples_leaf=50)
+model = ensemble.AdaBoostClassifier(random_state=42,
+                                    n_estimators=150,
+                                    learning_rate=0.1)
+
+model.fit(X=X_train_transform, y=y_train)
+
+# %%
+
+# ASSESS
+
+# Treino
+
+y_pred_treino = model.predict(X_train_transform)
+y_proba_treino = model.predict_proba(X_train_transform)
+
+y_pred_treino_acc = metrics.accuracy_score(y_train, y_pred_treino)
+y_pred_treino_auc = metrics.roc_auc_score(y_train, y_proba_treino[:,1])
+
+print(f"Acurácia Treino: {y_pred_treino_acc}")
+print(f"AUC Treino: {y_pred_treino_auc}")
+
+# %%
+
+# Teste
+
+X_test_transform = drop_features.transform(X_test)
+X_test_transform = imput_0.transform(X_test_transform)
+X_test_transform = imput_new.transform(X_test_transform)
+X_test_transform = imput_1000.transform(X_test_transform)
+X_test_transform = onehot.transform(X_test_transform)
+
+y_pred_test = model.predict(X_test_transform)
+y_proba_test = model.predict_proba(X_test_transform)
+
+y_pred_test_acc = metrics.accuracy_score(y_test, y_pred_test)
+y_pred_test_auc = metrics.roc_auc_score(y_test, y_proba_test[:,1])
+
+print(f"Acurácia Teste: {y_pred_test_acc}")
+print(f"AUC Teste: {y_pred_test_auc}")
+
+# %%
+
+# OOT
+
+X_oot = df_oot[features]
+y_oot = df_oot[target]
+
+X_oot_transform = drop_features.transform(X_oot)
+X_oot_transform = imput_0.transform(X_oot_transform)
+X_oot_transform = imput_new.transform(X_oot_transform)
+X_oot_transform = imput_1000.transform(X_oot_transform)
+X_oot_transform = onehot.transform(X_oot_transform)
+
+y_pred_oot = model.predict(X_oot_transform)
+y_proba_oot = model.predict_proba(X_oot_transform)
+
+y_pred_oot_acc = metrics.accuracy_score(y_oot, y_pred_oot)
+y_pred_oot_auc = metrics.roc_auc_score(y_oot, y_proba_oot[:,1])
+
+print(f"Acurácia oot: {y_pred_oot_acc}")
+print(f"AUC oot: {y_pred_oot_auc}")
+# %%
+
+feature_names = X_train_transform.columns.tolist()
+features_importance = pd.Series(model.feature_importances_, index=feature_names)
+features_importance.sort_values(ascending=False)
+# %%
