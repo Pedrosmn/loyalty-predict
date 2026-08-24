@@ -28,27 +28,29 @@ def date_range(start, stop, monthly=False):
     return dates
 
 
-def exec_query(table, db_origin, db_target, dt_start, dt_stop, monthly):
-
+def exec_query(table, db_origin, db_target, dt_start, dt_stop, monthly, mode='append'):
+    
     engine_app = sqlalchemy.create_engine(f"sqlite:///../../data/{db_origin}/database.db")
-    engine_analytical = sqlalchemy.create_engine(f"sqlite:///../../data/{db_target}/database.db") 
+    engine_analytical = sqlalchemy.create_engine(f"sqlite:///../../data/{db_target}/database.db")
 
     query = import_query(f"{table}.sql")
     dates = date_range(dt_start, dt_stop, monthly)
 
     for i in tqdm(dates):
-
-
-        with engine_analytical.connect() as con:
-            try:
-                query_delete = f"DELETE FROM {table} WHERE dtRef = date('{i}', '-1 day')"
-                con.execute(sqlalchemy.text(query_delete))
-                con.commit()
-            except Exception as err:
-                print(err)
+        
+        if mode == 'append':
+            with engine_analytical.connect() as con:
+                try:
+                    query_delete = f"DELETE FROM {table} WHERE dtRef = date('{i}', '-1 day')"
+                    con.execute(sqlalchemy.text(query_delete))
+                    con.commit()
+                except Exception as err:
+                    print(err)
+        
         query_format = query.format(date=i)
-        df = pd.read_sql(query_format, con=engine_app)
-        df.to_sql(con=engine_analytical, if_exists='append', name=table, index=False)
+        df = pd.read_sql(query_format, engine_app)
+        df.to_sql(table, engine_analytical, index=False, if_exists=mode)
+
 
 def main():
 
@@ -61,6 +63,7 @@ def main():
     now = datetime.datetime.now().strftime("%Y-%m-%d")
     parser.add_argument("--start", type=str, default=now)
     parser.add_argument("--stop", type=str, default=now)
+    parser.add_argument("--mode", choices=['append', 'replace'])
     args = parser.parse_args()
 
     exec_query(args.table, args.db_origin, args.db_target, args.start, args.stop, args.monthly)
